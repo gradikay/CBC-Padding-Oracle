@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBC Padding Oracle Attack Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+
+        .input-section {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .visualization {
+            margin-top: 30px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+
+        .block {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .block h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .hex-display {
+            font-family: 'Courier New', monospace;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .byte {
+            display: inline-block;
+            padding: 2px 4px;
+            margin: 2px;
+            border-radius: 3px;
+        }
+
+        .byte-current {
+            background: #ffc107;
+            font-weight: bold;
+        }
+
+        .byte-known {
+            background: #4caf50;
+            color: white;
+        }
+
+        .byte-unknown {
+            background: #ddd;
+        }
+
+        .progress {
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .log {
+            margin-top: 20px;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            border-radius: 8px;
+        }
+
+        .result h3 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 CBC Padding Oracle Attack Demo</h1>
+        <p class="subtitle">Educational visualization of how padding oracle attacks work</p>
+        
+        <div class="warning">
+            ⚠️ <strong>Educational Purpose Only:</strong> This demonstrates a cryptographic vulnerability. Never use this for unauthorized access. Always use authenticated encryption (like AES-GCM) in production.
+        </div>
+
+        <div class="input-section">
+            <label>Enter plaintext to encrypt (will be attacked):</label>
+            <input type="text" id="plaintext" placeholder="Enter your secret message..." value="Hello World!">
+        </div>
+
+        <div class="controls">
+            <button onclick="startAttack()">🎯 Start Attack</button>
+            <button onclick="reset()">🔄 Reset</button>
+        </div>
+
+        <div class="visualization" id="visualization" style="display: none;">
+            <div class="progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress">0%</div>
+                </div>
+            </div>
+
+            <div class="block">
+                <h3>📊 Attack Status</h3>
+                <div id="status">Initializing...</div>
+            </div>
+
+            <div class="block">
+                <h3>🔍 Current Block Being Decrypted</h3>
+                <div class="hex-display" id="currentBlock"></div>
+            </div>
+
+            <div class="block">
+                <h3>📝 Attack Log</h3>
+                <div class="log" id="log"></div>
+            </div>
+
+            <div id="result" style="display: none;" class="result">
+                <h3>✅ Attack Complete!</h3>
+                <p><strong>Decrypted plaintext:</strong></p>
+                <div class="hex-display" id="decrypted"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulated CBC encryption/decryption (simplified for demo)
+        let ciphertext = [];
+        let iv = [];
+        let plaintext = [];
+        let blockSize = 16;
+        let attacking = false;
+
+        // Simple XOR operation
+        function xor(a, b) {
+            return a.map((byte, i) => byte ^ b[i]);
+        }
+
+        // PKCS7 padding
+        function addPadding(data) {
+            const padLen = blockSize - (data.length % blockSize);
+            return [...data, ...Array(padLen).fill(padLen)];
+        }
+
+        function removePadding(data) {
+            const padLen = data[data.length - 1];
+            return data.slice(0, -padLen);
+        }
+
+        // Simulated padding oracle (checks if padding is valid)
+        function paddingOracle(iv, block) {
+            // Simulate decryption
+            const decrypted = xor(block, iv); // Simplified
+            const padValue = decrypted[decrypted.length - 1];
+            
+            // Check if padding is valid
+            if (padValue > blockSize || padValue === 0) return false;
+            
+            for (let i = 1; i <= padValue; i++) {
+                if (decrypted[decrypted.length - i] !== padValue) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Simulate encryption
+        function encrypt(text) {
+            const bytes = new TextEncoder().encode(text);
+            const padded = addPadding(Array.from(bytes));
+            
+            iv = Array(blockSize).fill(0).map(() => Math.floor(Math.random() * 256));
+            ciphertext = [];
+            
+            let prev = iv;
+            for (let i = 0; i < padded.length; i += blockSize) {
+                const block = padded.slice(i, i + blockSize);
+                const xored = xor(block, prev);
+                // Simplified: in real CBC, we'd apply block cipher here
+                const encrypted = xored.map(b => (b + 42) % 256);
+                ciphertext.push(...encrypted);
+                prev = encrypted;
+            }
+            
+            plaintext = padded;
+        }
+
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateProgress(current, total) {
+            const percent = Math.round((current / total) * 100);
+            const progressEl = document.getElementById('progress');
+            progressEl.style.width = percent + '%';
+            progressEl.textContent = percent + '%';
+        }
+
+        function displayBlock(bytes, currentPos = -1) {
+            const blockEl = document.getElementById('currentBlock');
+            blockEl.innerHTML = '';
+            
+            bytes.forEach((byte, i) => {
+                const span = document.createElement('span');
+                span.className = 'byte';
+                span.textContent = byte.toString(16).padStart(2, '0').toUpperCase();
+                
+                if (i === currentPos) {
+                    span.className += ' byte-current';
+                } else if (i > currentPos && currentPos !== -1) {
+                    span.className += ' byte-unknown';
+                } else if (currentPos !== -1) {
+                    span.className += ' byte-known';
+                }
+                
+                blockEl.appendChild(span);
+            });
+        }
+
+        async function attackBlock(block, prevBlock) {
+            const intermediate = Array(blockSize).fill(0);
+            const decrypted = Array(blockSize).fill(0);
+            
+            // Attack each byte from right to left
+            for (let padValue = 1; padValue <= blockSize; padValue++) {
+                log(`Attacking byte position ${blockSize - padValue + 1}/${blockSize}`);
+                displayBlock(decrypted, blockSize - padValue);
+                
+                let found = false;
+                // Try all possible byte values
+                for (let guess = 0; guess < 256; guess++) {
+                    const attackIV = Array(blockSize).fill(0);
+                    
+                    // Set known bytes to produce correct padding
+                    for (let k = 1; k < padValue; k++) {
+                        attackIV[blockSize - k] = intermediate[blockSize - k] ^ padValue;
+                    }
+                    
+                    // Set current guess
+                    attackIV[blockSize - padValue] = guess;
+                    
+                    // Query oracle (simulated)
+                    if (paddingOracle(attackIV, block)) {
+                        intermediate[blockSize - padValue] = guess ^ padValue;
+                        decrypted[blockSize - padValue] = intermediate[blockSize - padValue] ^ prevBlock[blockSize - padValue];
+                        log(`✓ Found byte: 0x${decrypted[blockSize - padValue].toString(16).padStart(2, '0')} (tried ${guess + 1} values)`);
+                        found = true;
+                        break;
+                    }
+                    
+                    // Simulate delay for visualization
+                    if (guess % 50 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1));
+                    }
+                }
+                
+                if (!found) {
+                    log(`✗ Failed to find byte at position ${blockSize - padValue}`);
+                }
+                
+                updateProgress(padValue, blockSize);
+            }
+            
+            return decrypted;
+        }
+
+        async function startAttack() {
+            if (attacking) return;
+            attacking = true;
+            
+            const input = document.getElementById('plaintext').value;
+            if (!input) {
+                alert('Please enter some plaintext!');
+                attacking = false;
+                return;
+            }
+            
+            // Setup
+            document.getElementById('visualization').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('log').innerHTML = '';
+            
+            log('🔐 Encrypting plaintext...');
+            encrypt(input);
+            
+            log(`📦 Created ${Math.ceil(ciphertext.length / blockSize)} block(s)`);
+            log(`🎯 Starting padding oracle attack...`);
+            
+            // Attack first block only (for demo purposes)
+            const block = ciphertext.slice(0, blockSize);
+            const decrypted = await attackBlock(block, iv);
+            
+            // Display result
+            const resultText = new TextDecoder().decode(new Uint8Array(removePadding(decrypted)));
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('decrypted').textContent = resultText;
+            
+            log('✅ Attack complete!');
+            attacking = false;
+        }
+
+        function reset() {
+            attacking = false;
+            document.getElementById('visualization').style.display = 'none';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('log').innerHTML = '';
+            updateProgress(0, 100);
+        }
+    </script>
+</body>
+</html>
