@@ -363,17 +363,28 @@
             return data;
         }
 
+        // Simple "block cipher" - just for demo, reversible
+        function blockCipher(block, key) {
+            return block.map((b, i) => (b + key[i]) % 256);
+        }
+
+        function blockDecipher(block, key) {
+            return block.map((b, i) => (b - key[i] + 256) % 256);
+        }
+
         // Simulated padding oracle (checks if padding is valid)
-        function paddingOracle(iv, block) {
-            // Simulate decryption
-            const decrypted = xor(block, iv); // Simplified
-            const padValue = decrypted[decrypted.length - 1];
+        function paddingOracle(testIV, cipherBlock, key) {
+            // Decrypt: decipher then XOR with IV
+            const deciphered = blockDecipher(cipherBlock, key);
+            const plainBlock = xor(deciphered, testIV);
+            
+            const padValue = plainBlock[plainBlock.length - 1];
             
             // Check if padding is valid
             if (padValue > blockSize || padValue === 0) return false;
             
             for (let i = 1; i <= padValue; i++) {
-                if (decrypted[decrypted.length - i] !== padValue) {
+                if (plainBlock[plainBlock.length - i] !== padValue) {
                     return false;
                 }
             }
@@ -387,14 +398,16 @@
             const padded = addPadding(Array.from(bytes));
             
             iv = Array(blockSize).fill(0).map(() => Math.floor(Math.random() * 256));
+            const key = Array(blockSize).fill(0).map(() => Math.floor(Math.random() * 256));
+            window.encryptionKey = key; // Store for oracle
+            
             ciphertext = [];
             
             let prev = iv;
             for (let i = 0; i < padded.length; i += blockSize) {
                 const block = padded.slice(i, i + blockSize);
                 const xored = xor(block, prev);
-                // Simplified: in real CBC, we'd apply block cipher here
-                const encrypted = xored.map(b => (b + 42) % 256);
+                const encrypted = blockCipher(xored, key);
                 ciphertext.push(...encrypted);
                 prev = encrypted;
             }
@@ -425,7 +438,10 @@
             bytes.forEach((byte, i) => {
                 const span = document.createElement('span');
                 span.className = 'byte';
-                span.textContent = byte.toString(16).padStart(2, '0').toUpperCase();
+                const hexValue = byte.toString(16).padStart(2, '0').toUpperCase();
+                const charValue = byte >= 32 && byte < 127 ? String.fromCharCode(byte) : '.';
+                span.textContent = hexValue;
+                span.title = `Byte ${i}: 0x${hexValue} (${charValue})`;
                 
                 if (i === currentPos) {
                     span.className += ' byte-current';
@@ -439,14 +455,13 @@
             });
         }
 
-        async function attackBlock(block, prevBlock) {
+        async function attackBlock(cipherBlock, prevBlock, key) {
             const intermediate = Array(blockSize).fill(0);
-            const decrypted = Array(blockSize).fill(0);
+            const plainBlock = Array(blockSize).fill(0);
             
             // Attack each byte from right to left
             for (let padValue = 1; padValue <= blockSize; padValue++) {
                 log(`Attacking byte position ${blockSize - padValue + 1}/${blockSize}`);
-                displayBlock(decrypted, blockSize - padValue);
                 
                 let found = false;
                 // Try all possible byte values
@@ -462,10 +477,16 @@
                     attackIV[blockSize - padValue] = guess;
                     
                     // Query oracle (simulated)
-                    if (paddingOracle(attackIV, block)) {
+                    if (paddingOracle(attackIV, cipherBlock, key)) {
+                        // Found valid padding!
                         intermediate[blockSize - padValue] = guess ^ padValue;
-                        decrypted[blockSize - padValue] = intermediate[blockSize - padValue] ^ prevBlock[blockSize - padValue];
-                        log(`✓ Found byte: 0x${decrypted[blockSize - padValue].toString(16).padStart(2, '0')} (tried ${guess + 1} values)`);
+                        plainBlock[blockSize - padValue] = intermediate[blockSize - padValue] ^ prevBlock[blockSize - padValue];
+                        
+                        const charRep = plainBlock[blockSize - padValue] >= 32 && plainBlock[blockSize - padValue] < 127 
+                            ? String.fromCharCode(plainBlock[blockSize - padValue]) 
+                            : '.';
+                        log(`✓ Found byte: 0x${plainBlock[blockSize - padValue].toString(16).padStart(2, '0')} ('${charRep}') (tried ${guess + 1} values)`);
+                        displayBlock(plainBlock, blockSize - padValue);
                         found = true;
                         break;
                     }
@@ -483,7 +504,7 @@
                 updateProgress(padValue, blockSize);
             }
             
-            return decrypted;
+            return plainBlock;
         }
 
         async function startAttack() {
@@ -514,11 +535,16 @@
             
             // Attack first block only (for demo purposes)
             const block = ciphertext.slice(0, blockSize);
-            const decrypted = await attackBlock(block, iv);
+            const decrypted = await attackBlock(block, iv, window.encryptionKey);
             
             // Remove padding and convert to text
             const unpaddedBytes = removePadding(decrypted);
-            const resultText = new TextDecoder().decode(new Uint8Array(unpaddedBytes));
+            let resultText = '';
+            try {
+                resultText = new TextDecoder().decode(new Uint8Array(unpaddedBytes));
+            } catch (e) {
+                resultText = unpaddedBytes.map(b => String.fromCharCode(b)).join('');
+            }
             
             // Show comparison
             document.getElementById('resultSection').style.display = 'block';
