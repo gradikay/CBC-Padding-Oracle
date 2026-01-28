@@ -201,10 +201,64 @@
             margin-bottom: 10px;
         }
 
+        .original-plaintext {
+            margin-top: 20px;
+            padding: 20px;
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+        }
+
+        .original-plaintext h3 {
+            color: #1565c0;
+            margin-bottom: 10px;
+        }
+
         .controls {
             display: flex;
             gap: 10px;
             margin-top: 15px;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .comparison-box {
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .comparison-original {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+        }
+
+        .comparison-decrypted {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+        }
+
+        .comparison-box h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .comparison-original h4 {
+            color: #1565c0;
+        }
+
+        .comparison-decrypted h4 {
+            color: #2e7d32;
+        }
+
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -228,6 +282,11 @@
         </div>
 
         <div class="visualization" id="visualization" style="display: none;">
+            <div class="original-plaintext">
+                <h3>📄 Original Plaintext (What We're Trying to Decrypt)</h3>
+                <div class="hex-display" id="originalPlaintext"></div>
+            </div>
+
             <div class="progress">
                 <div class="progress-bar">
                     <div class="progress-fill" id="progress">0%</div>
@@ -249,10 +308,17 @@
                 <div class="log" id="log"></div>
             </div>
 
-            <div id="result" style="display: none;" class="result">
-                <h3>✅ Attack Complete!</h3>
-                <p><strong>Decrypted plaintext:</strong></p>
-                <div class="hex-display" id="decrypted"></div>
+            <div id="result" style="display: none;">
+                <div class="comparison">
+                    <div class="comparison-box comparison-original">
+                        <h4>📄 Original Plaintext</h4>
+                        <div class="hex-display" id="comparisonOriginal"></div>
+                    </div>
+                    <div class="comparison-box comparison-decrypted">
+                        <h4>✅ Decrypted via Attack</h4>
+                        <div class="hex-display" id="comparisonDecrypted"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -264,6 +330,7 @@
         let plaintext = [];
         let blockSize = 16;
         let attacking = false;
+        let originalPlaintextString = '';
 
         // Simple XOR operation
         function xor(a, b) {
@@ -300,6 +367,7 @@
 
         // Simulate encryption
         function encrypt(text) {
+            originalPlaintextString = text;
             const bytes = new TextEncoder().encode(text);
             const padded = addPadding(Array.from(bytes));
             
@@ -422,6 +490,9 @@
             log('🔐 Encrypting plaintext...');
             encrypt(input);
             
+            // Display original plaintext
+            document.getElementById('originalPlaintext').textContent = originalPlaintextString;
+            
             log(`📦 Created ${Math.ceil(ciphertext.length / blockSize)} block(s)`);
             log(`🎯 Starting padding oracle attack...`);
             
@@ -432,9 +503,14 @@
             // Display result
             const resultText = new TextDecoder().decode(new Uint8Array(removePadding(decrypted)));
             document.getElementById('result').style.display = 'block';
-            document.getElementById('decrypted').textContent = resultText;
+            document.getElementById('comparisonOriginal').textContent = originalPlaintextString;
+            document.getElementById('comparisonDecrypted').textContent = resultText;
             
             log('✅ Attack complete!');
+            log(`📊 Original: "${originalPlaintextString}"`);
+            log(`📊 Decrypted: "${resultText}"`);
+            log(`🎯 Match: ${originalPlaintextString === resultText ? 'YES ✓' : 'NO ✗'}`);
+            
             attacking = false;
         }
 
