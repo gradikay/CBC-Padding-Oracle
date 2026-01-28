@@ -202,7 +202,8 @@
         }
 
         .original-plaintext {
-            margin-top: 20px;
+            margin-top: 0;
+            margin-bottom: 20px;
             padding: 20px;
             background: #e3f2fd;
             border: 2px solid #2196f3;
@@ -224,7 +225,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-top: 10px;
         }
 
         .comparison-box {
@@ -245,6 +246,7 @@
         .comparison-box h4 {
             margin-bottom: 10px;
             font-size: 14px;
+            font-weight: 600;
         }
 
         .comparison-original h4 {
@@ -253,6 +255,15 @@
 
         .comparison-decrypted h4 {
             color: #2e7d32;
+        }
+
+        .text-content {
+            font-family: 'Courier New', monospace;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            min-height: 40px;
         }
 
         @media (max-width: 768px) {
@@ -284,7 +295,7 @@
         <div class="visualization" id="visualization" style="display: none;">
             <div class="original-plaintext">
                 <h3>📄 Original Plaintext (What We're Trying to Decrypt)</h3>
-                <div class="hex-display" id="originalPlaintext"></div>
+                <div class="text-content" id="originalPlaintext"></div>
             </div>
 
             <div class="progress">
@@ -308,15 +319,16 @@
                 <div class="log" id="log"></div>
             </div>
 
-            <div id="result" style="display: none;">
+            <div class="result" id="resultSection" style="display: none;">
+                <h3>✅ Attack Complete - Comparison</h3>
                 <div class="comparison">
                     <div class="comparison-box comparison-original">
                         <h4>📄 Original Plaintext</h4>
-                        <div class="hex-display" id="comparisonOriginal"></div>
+                        <div class="text-content" id="comparisonOriginal"></div>
                     </div>
                     <div class="comparison-box comparison-decrypted">
-                        <h4>✅ Decrypted via Attack</h4>
-                        <div class="hex-display" id="comparisonDecrypted"></div>
+                        <h4>🔓 Decrypted via Attack</h4>
+                        <div class="text-content" id="comparisonDecrypted"></div>
                     </div>
                 </div>
             </div>
@@ -345,7 +357,10 @@
 
         function removePadding(data) {
             const padLen = data[data.length - 1];
-            return data.slice(0, -padLen);
+            if (padLen > 0 && padLen <= blockSize) {
+                return data.slice(0, -padLen);
+            }
+            return data;
         }
 
         // Simulated padding oracle (checks if padding is valid)
@@ -484,25 +499,29 @@
             
             // Setup
             document.getElementById('visualization').style.display = 'block';
-            document.getElementById('result').style.display = 'none';
+            document.getElementById('resultSection').style.display = 'none';
             document.getElementById('log').innerHTML = '';
             
             log('🔐 Encrypting plaintext...');
             encrypt(input);
             
-            // Display original plaintext
+            // Display original plaintext immediately
             document.getElementById('originalPlaintext').textContent = originalPlaintextString;
             
             log(`📦 Created ${Math.ceil(ciphertext.length / blockSize)} block(s)`);
+            log(`📄 Original plaintext: "${originalPlaintextString}"`);
             log(`🎯 Starting padding oracle attack...`);
             
             // Attack first block only (for demo purposes)
             const block = ciphertext.slice(0, blockSize);
             const decrypted = await attackBlock(block, iv);
             
-            // Display result
-            const resultText = new TextDecoder().decode(new Uint8Array(removePadding(decrypted)));
-            document.getElementById('result').style.display = 'block';
+            // Remove padding and convert to text
+            const unpaddedBytes = removePadding(decrypted);
+            const resultText = new TextDecoder().decode(new Uint8Array(unpaddedBytes));
+            
+            // Show comparison
+            document.getElementById('resultSection').style.display = 'block';
             document.getElementById('comparisonOriginal').textContent = originalPlaintextString;
             document.getElementById('comparisonDecrypted').textContent = resultText;
             
@@ -511,15 +530,22 @@
             log(`📊 Decrypted: "${resultText}"`);
             log(`🎯 Match: ${originalPlaintextString === resultText ? 'YES ✓' : 'NO ✗'}`);
             
+            // Also log to browser console
+            console.log('=== CBC Padding Oracle Attack Results ===');
+            console.log('Original Plaintext:', originalPlaintextString);
+            console.log('Decrypted Plaintext:', resultText);
+            console.log('Match:', originalPlaintextString === resultText);
+            
             attacking = false;
         }
 
         function reset() {
             attacking = false;
             document.getElementById('visualization').style.display = 'none';
-            document.getElementById('result').style.display = 'none';
+            document.getElementById('resultSection').style.display = 'none';
             document.getElementById('log').innerHTML = '';
             updateProgress(0, 100);
+            console.clear();
         }
     </script>
 </body>
